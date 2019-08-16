@@ -4,9 +4,13 @@ AQL: Algebraic Query Language - language design example implemented in Java usin
 For the AQL class files, the html docs of the source code, benches and benches reference files, and test files, check out:
 
 https://github.com/ha-k/jaccapps-aql-classes
+
 https://github.com/ha-k/jaccapps-aql-docs
+
 https://github.com/ha-k/jaccapps-aql-benches
+
 https://github.com/ha-k/jaccapps-aql-benches-refs
+
 https://github.com/ha-k/jaccapps-aql-tests
 
 The contents must be copied into the main aql directory under the names: *classes*, *docs*, *benches*, and *tests*, and the contents of jaccapps-aql-benches-refs in a subdirectory of *benches* named *refbench*.
