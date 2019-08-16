@@ -1,0 +1,128 @@
+// FILE. . . . . /home/hak/hlt/src/hlt/language/jaccapps/aql/sources/AQL.grm
+// EDIT BY . . . Hassan Ait-Kaci
+// ON MACHINE. . Hp-Dv7
+// STARTED ON. . Wed Oct 17 20:53:56 2012
+
+/**
+ * @version     Last modified on Wed Jan 30 12:24:24 2013 by hak
+ * @author      <a href="mailto:hak@acm.org">Hassan A&iuml;t-Kaci</a>
+ * @copyright   &copy; <a href="http://www.hassan-ait-kaci.net/">by the author</a>
+ */
+
+%package hlt.aql;
+
+/* ************************************************************************************* */
+/* **************************** AQL  GRAMMAR  SPECIFICATION  *************************** */
+/* ************************************************************************************* */
+
+/**
+ * This grammar defines a fully-working Algebraic Query Language (AQL)
+ * prototype expressed using the <tt class="code"><A CLASS="PLAIN"
+ * HREF="../../../../../../../doc/hlt/api/hlt/language/design/">hlt.language.design</A></tt>
+ * language design package. It includes a full polymorphic type-checker,
+ * an intermediate code compiler, and runtime system.
+ *
+ * <p>
+ *
+ * AQL's Jacc and Java source documentation are given
+ * <a href="index.html">here</a>.
+ * AQL's purely syntactic grammar in yacc format is given
+ * <a href="YaccForm.html">here</a>.
+ *
+ * <p>
+ *
+ * The AQL languague uses a <i>surface syntax</i> for an interactive
+ * query language based on:
+ * 
+ * <ul>
+ * <li><font color=brown>
+ * Leonidas Fegaras and David Maier,
+ * "Optimizing object queries using an effective calculus,"
+ * <i>ACM Transactions on Database Systems</i>
+ * <b>25</b>(4), 457-516, 2000
+ * (<a href="http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.30.1841">available on line</a>).
+ * </font>
+ *
+ * <p>
+ *
+ * or, as well, on:
+ *
+ * <p>
+ *
+ * <li><font color=brown>
+ * Tortsten Grust.
+ * Monad Comprehensions. A Versatile Representation for Queries,
+ * in P.M.D. Gray, L. Kerschberg, P.J.H. King, A. Poulovassilis (eds.),
+ * <i>The Functional Approach to Data Management - Modeling, Analyzing
+ * and Integrating Heterogeneous Data,</i> Springer Verlag, ISBN 3-540-00375-4,
+ * September 2003 (<a
+ * href="http://www.inf.uni-konstanz.de/dbis/publications/download/monad-comprehensions.pdf">available
+ * on line</a>).
+ * </font>
+ * </ul>
+ *
+ * That is, our prototype AQL v0.00 is a functional language augmented with a
+ * calculus of compehensions <i>&agrave; la</i> Fegaras-Maier, or <i>&agrave;
+ * la</i> Grust. In other words, it is a complete query language, powerful enough
+ * to express most of [<a href="http://www.odmg.org/">ODMG</a>]
+ * <a href="http://www.mm.di.uoa.gr/~toobis/seminar/OQL/tsld001.htm">OQL</a>, and
+ * thus many of its derivatives such as, <i>e.g.</i>, <a
+ * href="http://www.w3.org/TR/xquery/">XQuery</a>, (see also <a
+ * href="http://www.gnu.org/software/qexo/XQuery-Intro.html">here</a> for an
+ * overview), <a href="http://www.w3.org/TR/xpath">XPath</a>, (see also <a
+ * href="http://www.zvon.org/xxl/XPathTutorial/General/examples.html">here</a>
+ * for a tutorial), <i>etc.</i>, ...
+ *
+ * <p>
+ *
+ * This version of AQL can be run both interactively and in batch
+ * mode. In the former case, a user can define top-level constructs and
+ * evaluate expressions.  AQL v0.00 supports 2nd-order (ML-like) type
+ * polymorphism, automatic currying, associative arrays, multiple type
+ * overloading, dynamic operator overloading, as well as (polymorphic)
+ * type definition (both aliasing and hiding), classes and objects, and
+ * (of course) monoid homomorphisms and comprehensions (<i>N.B.</i>: no
+ * subtyping nor inheritance yet - but this is next on my agenda...).
+ *
+ */
+
+/* ************************************************************************************* */
+/* ************************************ DECLARATIONS *********************************** */
+/* ************************************************************************************* */
+
+%include declarations.grm
+
+/* ************************************************************************************* */
+/* ************************************ ANCILLARIES ************************************ */
+/* ************************************************************************************* */
+
+%include ancillary.grm
+
+/* ************************************************************************************* */
+/* ************************************ NODE CLASSES *********************************** */
+/* ************************************************************************************* */
+
+%include nodeclasses.grm
+
+/* ************************************************************************************* */
+/* *************************************   RULES   ************************************* */
+/* ************************************************************************************* */
+
+%include rules.grm
+
+/* ************************************************************************************* */
+/* ************************************* UTILITIES ************************************* */
+/* ************************************************************************************* */
+
+class Utilities
+  {
+    static final void popList (ArrayList list)
+      {
+	if (list != null && !list.isEmpty())
+	  list.remove(list.size()-1);
+      }
+  }
+
+/* ************************************************************************************* */
+/* *********************************  END  OF  GRAMMAR  ******************************** */
+/* ************************************************************************************* */

@@ -1,0 +1,1031 @@
+// FILE. . . . . /home/hak/hlt/src/hlt/language/jaccapps/aql/sources/rules.grm
+// EDIT BY . . . Hassan Ait-Kaci
+// ON MACHINE. . Hp-Dv7
+// STARTED ON. . Thu Oct 18 00:33:22 2012
+
+/**
+ * This file contains the grammar rules  the <a href="../docs/AQLDoc/AQL.html">AQL
+ * language</a> and the semantic actions associated to them.
+ * 
+ * @version     Last modified on Thu Oct 18 00:40:42 2012 by hak
+ * @author      <a href="mailto:hak@acm.org">Hassan A&iuml;t-Kaci</a>
+ * @copyright   &copy; <a href="http://www.hassan-ait-kaci.net/">by the author</a>
+ */
+
+/* ************************************************************************************* */
+/* ********************************  GRAMMAR  RULES  *********************************** */
+/* ************************************************************************************* */
+
+%%
+
+/**
+ * This is the start symbol. It denotes an AQL program; <i>i.e.</i>, a
+ * possibly empty sequence of $Statement$s.
+ */
+Statements_opt
+        : /** Empty programs are ok. */
+        | /** A sequence of statements makes up an AQL Program. */
+          Statements_opt Statement
+        ;
+
+/**
+ * This is the main compilation unit, an element of the sequence of
+ * statements that make up an AQL program.
+ * It consists of one of:
+ * <ul>
+ * <li><b>Pragma statement:</b> ($Pragma$)<br>
+ *     Extra-language commands for user interaction conveniences such as
+ *     tracing etc...
+ *
+ * <p>
+ * <li><b>Definition statement:</b> ($DefinitionStatement$)<br>
+ *     To define various kinds of terms, types and values. 
+ *
+ * <p>
+ * <li><b>Typing statement:</b> ('$?$')<br>
+ *     To type an $Expression$ (and display all its most general types).
+ *
+ * <p>
+ * <li><b>Expression evaluation statement:</b> ($Expression$)<br>
+ *     To type and evaluate an expression (with possible side effects).
+ *
+ * <p>
+ * <li><b>Error statement:</b> (error)<br>
+ *     To enable error recovery <i>&agrave; la</i> yacc.
+ *
+ * <p>
+ * <li><b>Empty statement:</b> ('$;$')<br>
+ *     Has no effect; simply skipped.
+ * </ul>
+ */
+Statement
+	: /** This statement means to en/disable some built-in meta-programming
+   	      pragmas defining various modes of user interaction (see $Pragma$).
+	  */
+	  '#' Pragma PragmaArgument_opt
+          {
+            processPragma($2.svalue().intern(),$3.svalue());
+          } EOS
+	| /** This statement is used to define shorthands for types, expressions,
+	      and values...
+	  */
+	  DefinitionStatement
+	| /** This statement is used to find out all the principal legal types of an
+	      expression...
+	  */
+	  '?' Expression
+	  {
+	    displayAllTypes($2.expression);
+	  } EOS
+	| /** This statement first infers/verifies a unique principal
+	      type for the given expression, and if such a unique type
+	      exists, compiles and evaluates it. Then, AQL prints the
+	      result of each expression it evaluates in the form <tt
+	      class=code>value : type</tt> (suppressing this result
+	      display may be done using the <tt class=kbd>mute</tt>
+	      pragma - see $Pragma$).  */
+	  Expression
+	  { //hlt.language.tools.Debug.step($1.expression);
+	    if (showTree) currentNode().display();
+	    processExpression($1.expression);
+	  } EOS
+	| /** This rule is needed to enable error recovery <i>&agrave;
+	      la</i> yacc.  This is what makes $Statement$ a unit of
+	      parsing for AQL: in case of syntax error, AQL's parser
+	      ignores everything past the last successfully parsed
+	      $Statement$ and up to the next end of statement character:
+	      a semicolon ('$;$'- also known as the nonterminal $EOS$,
+	      which is used instead of '$;$' in certain rules in order
+	      to enable a user prompt action when in interactive mode).  */
+	  error
+	    {
+	      errorManager().reportErrors(true);
+	    } EOS
+	| /** This is the empty statement; it is a no-op in AQL. */
+	  ';'
+	;
+
+/**
+ * This non-terminal denotes statements used to define various kinds of
+ * terms, types and values. It may be either one of:
+ * <ul>
+ * <li><b>Explicit definition:</b> ($DefinitionKind$)<br>
+ *     To define several kinds of shorthands for types, expressions,
+ *     and values.
+ *
+ * <p>
+ * <li><b>Implicit type definition:</b> ($StructureOrClassDeclaration$)<br>
+ *     For declaring structure or class types - both of which amount to
+ *     a few (type and function value) definitions.
+ * </ul>
+ */
+DefinitionStatement
+        : 'define' DefinitionKind EOS
+        | StructureOrClassDeclaration
+        ;
+   
+/**
+ * This non-terminal denotes statements used to declare or define
+ * various AQL language concepts:
+ * <ul>
+ * <li><b>Operator definition:</b> ('$operator$')<br>
+ *     To define a new, or redefine an existing, operator symbol.
+ *
+ * <p>
+ * <li><b>Signature definition:</b> ('$signature$')<br>
+ *     To declare the type of a yet to be defined symbol (an $Operator$).
+ * </ul> */
+DefinitionKind
+        : /** This defines a new, or redefines an existing, operator symbol.
+	    * The $SPECIFIER$ is <i>&agrave; la</i> Prolog. Indeed,
+	    * as in Prolog, AQL operators may be declared at runtime using
+ 	    * the built-in $operator$ keyword followed by an $Operator$ (the
+ 	    * one being [re]defined), a fixity/associativity $SPECIFIER$,
+	    * and a precedence level: a natural number in the range [1..1200].
+	    * For example,
+	    *
+	    * <pre class="code">
+	    *         operator + yfx 500;
+	    * </pre>
+	    * redefines the symbol <tt>'+'</tt> to be an infix binary left-associative
+	    * operator with binding </i>looseness</i> 500 (binding looseness is the
+	    * opposite of precedence - <i>anti-precedence</i>, so to speak).
+	    */
+  	  'operator' Operator SPECIFIER INT
+	  {
+	    processOperator($2.svalue(),$3.svalue(),(int)$4.nvalue());
+	  }
+        | 'signature' Operator Typing
+	  {
+	    processType($2.svalue(),$3.type);
+	  }
+        | 'type'
+          {
+	    setLocation(tokenNode);
+	  }
+          'alias' ID
+          {
+	    pushTypeParameters();
+	  }
+          TypeParameters_opt '=' Type
+	  {
+	    processTypeAlias($4.svalue(),$8.type);
+	    popTypeParameters();
+	  }
+        | 'type'
+          {
+	    setLocation(tokenNode);
+	  }
+          'name' ID
+          {
+	    pushTypeParameters();
+	  }
+          TypeParameters_opt '=' Type
+	  {
+	    processNewType($4.svalue(),$8.type);
+	    popTypeParameters();
+	  }
+        | 'value' Definition
+	  {
+	    if (showTree) currentNode().display();
+	    processEvaluatedDefinition($2.symbol,$2.parameters,$2.types,$2.expression);
+	  }
+        | Definition
+	  {
+	    if (showTree) currentNode().display();
+	    processDefinition($1.symbol,$1.parameters,$1.types,$1.expression);
+	  }
+        ;
+   
+StructureOrClassDeclaration
+        : 'structure' { setLocation(tokenNode); } ID  { pushTypeParameters(); }
+          TypeParameters_opt '{' NamedTupleTypeComponents '}'
+        {
+          processStruct($3.svalue(),$7.fields,$7.types);
+          popTypeParameters();
+          commitParse();
+        }
+        | 'class' ID { pushTypeParameters(); } TypeParameters_opt Interface Implementation_opt
+        {
+          processClass($2.svalue(),$5.symbols,$5.types,$5.expressions,
+                       $6.symbols,$6.parameters,$6.types,$6.expressions,
+                       new Span($5.getStart(),
+                                $6.symbols == null ? $5.getEnd() : $6.getEnd()));
+          popTypeParameters();
+          commitParse();
+        }
+        ;
+   
+/**
+ * This node stands for a pragma statement which allows the user to set
+ * up some interactive conveniences dynamically using a few built-in
+ * extra-language commands of the form <font
+ * color="brown"><tt>#pragma;</tt></font> where <font
+ * color="brown"><tt>pragma</tt></font> is an identifier. Currently
+ * defined pragmas are:
+ * <p>
+ * <table align="center", border="2", cellpadding="5">
+ * <tr><th align="left"><tt class="code">pragma</tt>
+ * </th><th align="left"><i class="kbd">effect</i></th></tr>
+ * <tr><td></td></tr>
+ * <tr><td><tt class="code">exit</tt></td>
+ * <td><i class="kbd">exit AQL</i></td></tr>
+ * <tr><td><tt class="code">mute</tt></td>
+ * <td><i class="kbd">toggle on/off intermediate displays such as
+ *     '<tt class=code>value : type</tt>', etc...</i></td></tr>
+ * <tr><td><tt class="code">tree</tt></td>
+ * <td><i class="kbd">toggle on/off graphical display of syntax tree</i></td></tr>
+ * <tr><td><tt class="code">include</tt></td>
+ * <td><i class="kbd">start reading from the file (name specified as a quoted string)</i></td></tr>
+ * <tr><td><tt class="code">time</tt></td>
+ * <td><i class="kbd">toggle on/off execution timing</i></td></tr>
+ * <tr><td><tt class="code">gc</tt></td>
+ * <td><i class="kbd">force immediate garbage collection</i></td></tr>
+ * <tr><td><tt class="code">syntax</tt></td>
+ * <td><i class="kbd">toggle on/off parser tracing</i></td></tr>
+ * <tr><td><tt class="code">typing</tt></td>
+ * <td><i class="kbd">toggle on/off typecheck tracing</i></td></tr>
+ * <tr><td><tt class="code">trace</tt></td>
+ * <td><i class="kbd">toggle on/off runtime tracing</i></td></tr>
+ * <tr><td><tt class="code">kbd</tt></td>
+ * <td><i class="kbd">toggle on/off compiled code display</i></td></tr>
+ * <tr><td><tt class="code">fields</tt></td>
+ * <td><i class="kbd">toggle on/off class fields' code display</i></td></tr>
+ * <tr><td><tt class="code">defined</tt></td>
+ * <td><i class="kbd">list all the currently defined symbols</i></td></tr>
+ * <tr><td><tt class="code">symbols</tt></td>
+ * <td><i class="kbd">list all the known (built-in and defined) symbols</i></td></tr>
+ * <tr><td><tt class="code">types</tt></td>
+ * <td><i class="kbd">list all the registered (declared or not) types</i></td></tr>
+ * <tr><td><tt class="code">help</tt></td>
+ * <td><i class="kbd">list this information</i></td></tr>
+ * </table>
+ */
+Pragma
+        : ID
+        ;
+
+PragmaArgument_opt
+        : /* empty */
+        | STRING
+        ;
+
+/**
+ * This symbol denotes the end of a statement. It recognizes the end of statement
+ * character ('$;$') as a statement delimiter and triggers a prompt when AQL is
+ * in interactive mode. 
+ */
+EOS
+	: /** This rule must use the same end of statement character as the error
+	      handling rule to be consistent with error recovery.
+	  */
+	  { commitParse(); } ';'
+        ;
+
+Operator
+        : ID
+        ;
+
+Typing_opt
+        : /* empty */
+        { $$.type = new TypeParameter(); }
+        | Typing
+        { $$.type = $1.type; }
+        ;
+
+Typing
+        : ':' Type
+        { $$.type = $2.type; }
+        ;
+
+Type_opt
+        : /* empty */
+        | Type
+        { $$.type = $1.type; }
+        ;
+
+Type
+        : TypeConstant
+        { $$.type = $1.type; }
+        | FunctionType
+        { $$.type = $1.type; }
+        | TupleType
+        { $$.type = $1.type; }
+        | ArrayType
+        { $$.type = $1.type; }
+        | CollectionType
+        { $$.type = $1.type; }
+        | IntRangeType
+        { $$.type = $1.type; }
+        | RealRangeType
+        { $$.type = $1.type; }
+        | TypeTerm
+        { $$.type = $1.type; }
+        | '(' Type_opt ')'
+        { $$.type = $2.type == null ? Type.VOID : $2.type; }
+        | '[' PrimitiveType ']'
+        { $$.type = $2.type.setBoxed(true); }
+        | 'forall' { pushTypeParameters(); } TypeParameters '.' Type
+        { $$.type = $5.type; popTypeParameters();
+        /* Type.resetNames();hlt.language.tools.Debug.step($$.type.toQuantifiedString()); */ }
+        ;
+
+TypeConstant
+        : PrimitiveType
+        { $$.type = $1.type; }
+        | 'string'
+        { $$.type = Type.STRING; }
+        ;
+
+PrimitiveType
+        : 'void'
+        { $$.type = Type.VOID; }
+        | 'int'
+        { $$.type = Type.INT(); }
+        | 'boolean'
+        { $$.type = Type.BOOLEAN(); }
+        | 'char'
+        { $$.type = Type.CHAR(); }
+        | 'real'
+        { $$.type = Type.REAL(); }
+        ;
+
+FunctionType
+        : Type '->' Type
+        { $$.type = new FunctionType($1.type,$3.type); }
+        | '(' Types_opt ')' '->' Type
+	{ $$.type = new FunctionType($2.types,$5.type); }
+        ;
+
+TupleType
+        : '<' TupleTypeComponents '>'
+        { $$.type = $2.type; }
+        ;
+
+TupleTypeComponents
+        : Types_opt
+        { $$.type = TupleType.newTupleType($1.types); }
+        | NamedTupleTypeComponents
+        { $$.type = new NamedTupleType($1.types,$1.fields); }
+        ;
+
+NamedTupleTypeComponents
+        : NamedTupleTypeComponent
+        { ($$.types = new ArrayList()).add($1.type); ($$.fields = new ArrayList()).add($1.svalue()); }
+        | NamedTupleTypeComponents ',' NamedTupleTypeComponent
+        { ($$.types = $1.types).add($3.type); ($$.fields = $1.fields).add($3.svalue()); }
+        ;
+ 
+NamedTupleTypeComponent
+        : ID Typing
+        { $$.setSvalue($1.svalue()); $$.type = $2.type; }
+        ;
+
+ArrayType
+        : Type '[' IndexType ']'
+        { try
+            {
+              $$.type = new ArrayType($1.type,$3.type);
+            }
+          catch (StaticSemanticsErrorException e)
+            {
+              errors.add(staticSemanticsError(e.msg(),$$));
+            }
+        }
+        ;
+
+IndexType
+        : IntType_opt
+        { $$.type = Type.INT(); }
+        | MapIndexType
+        { $$.type = $1.type; }
+        ;
+
+IntType_opt
+        : /* empty */
+        | 'int'
+        ;
+
+MapIndexType
+        : SetType
+        { $$.type = $1.type; }
+        | IntRangeType
+        { $$.type = $1.type; }
+        ;
+
+CollectionType
+        : SetType
+        { $$.type = $1.type; }
+        | NonSetKind '{' Type_opt '}'
+        { try
+            {
+	      switch ($1.kind)
+		{
+		  case Type.BAG:
+		    $$.type = new BagType($3.type == null ? new TypeParameter() : $3.type);
+		    break;
+		  case Type.LIST:
+		    $$.type = new ListType($3.type == null ? new TypeParameter() : $3.type);
+		}
+            }
+          catch (StaticSemanticsErrorException e)
+            {
+              errors.add(staticSemanticsError(e.msg(),$$));
+            }
+        }
+        ;
+
+CollectionKind
+	: SetKind
+        | NonSetKind
+	{ $$.kind = $1.kind; }
+	;
+
+SetKind
+        : 'set'
+        ;
+
+NonSetKind
+	: 'bag'
+	{ $$.kind = Type.BAG; }
+	| 'list'
+	{ $$.kind = Type.LIST; }
+	;
+
+SetKind_opt
+        : /* empty */
+        | SetKind
+        ;
+
+/**
+ * This denotes a set type of base type $Type_opt$. If the base type is missing,
+ * it is set to a type parameter. (<i>NB:</i> the collection kind keyword '$set$'
+ * is optional for set types).
+ */
+SetType
+        : SetKind_opt '{' Type_opt '}'
+        { try
+            {
+	      $$.type = new SetType($3.type == null ? new TypeParameter() : $3.type);
+            }
+          catch (StaticSemanticsErrorException e)
+            {
+              errors.add(staticSemanticsError(e.msg(),$$));
+            }
+        }
+	;
+
+IntRangeType
+        : 'int' '..' 'int'
+        { $$.type = Type.INT_RANGE; }
+        ;
+
+RealRangeType
+        : 'real' '..' 'real'
+        { $$.type = Type.REAL_RANGE; }
+        ;
+
+TypeTerm
+        : ID
+        {
+          $$.type = getTypeParameter($1.svalue());
+          if ($$.type == null)
+            $$.type = tables.getType($1.svalue());
+        }
+        | ID '(' Types ')'
+        {
+          try
+            {
+              $$.type = tables.getType($1.svalue(),$3.types);
+            }
+          catch (StaticSemanticsErrorException e)
+            {
+              errors.add(staticSemanticsError(e.msg(),$$));
+            }
+        }
+        ;
+
+Types_opt
+        : /* empty */
+        { $$.types = new ArrayList(); }
+        | Types
+        { $$.types = $1.types; }
+        ;
+
+Types
+        : Type
+        { ($$.types = new ArrayList()).add($1.type); }
+        | Types ',' Type
+        { ($$.types = $1.types).add($3.type); }
+        { $$.undo(); }
+        ;
+
+TypeParameters_opt
+        : // empty
+        | '(' TypeParameters ')'
+        ;
+
+TypeParameters
+        : ID
+        { registerTypeParameter($1.svalue()); }
+        | TypeParameters ',' ID
+        { registerTypeParameter($3.svalue()); }
+        ;
+
+Interface
+        : '{' MemberDeclarations_opt '}'
+        {
+          $$.symbols = $2.symbols;
+          $$.types = $2.types;
+          $$.expressions = $2.expressions;
+        }
+        ;
+
+MemberDeclarations_opt
+        : /* empty */
+        {
+          $$.symbols = new ArrayList();
+          $$.types = new ArrayList();
+          $$.expressions = new ArrayList();
+        }
+        | MemberDeclarations_opt MemberDeclaration
+        {
+          ($$.symbols = $1.symbols).add($2.symbol);
+          ($$.types = $1.types).add($2.type);
+          ($$.expressions = $1.expressions).add($2.expression);
+        }
+        { $$.undo(); }
+        ;
+
+MemberDeclaration
+        : ID Typing Initialization_opt ';'
+        {
+          setLocation();
+          $$.symbol = $1.svalue();
+          $$.type = $2.type;
+          $$.expression = $3.expression;
+        }
+        | 'method' Operator Typing ';'
+        {
+          setLocation();
+          $$.symbol = $2.svalue();
+          $$.type = $3.type;
+        }
+        ;
+
+Initialization_opt
+        : /* empty */
+        { $$.expression = Constant.NULL(); }
+        | '=' Expression
+        { $$.expression = $2.expression; }
+        ;
+
+Implementation_opt
+        : /* empty */
+        | '{' Definitions_opt '}'
+        {        
+          $$.symbols = $2.symbols;
+          $$.parameters = $2.parameters;
+          $$.types = $2.types;
+          $$.expressions = $2.expressions;
+        }
+        ;
+
+Definitions_opt
+        : /* empty */
+        {
+          $$.symbols = new ArrayList();
+          $$.parameters = new ArrayList();
+          $$.types = new ArrayList();
+          $$.expressions = new ArrayList();
+        }
+        | Definitions_opt Definition ';'
+        {
+          setLocation();
+          ($$.symbols = $1.symbols).add($2.symbol);
+          ($$.parameters = $1.parameters).add($2.parameters);
+          ($$.types = $1.types).add($2.types);
+          ($$.expressions = $1.expressions).add($2.expression);
+        }
+        { $$.undo(); }
+        ;
+
+Definition
+        : Operator FunctionParameters_opt Typing_opt '=' Expression
+        {
+          $$.symbol = $1.svalue();
+          $$.parameters = $2.parameters;
+          $$.types = $2.types;
+          $$.expression = $5.expression.addType($3.type);
+        }
+        ;
+
+FunctionParameters_opt
+        : /* empty */
+        | FunctionParameters
+        {
+          $$.parameters = $1.parameters;
+          $$.types = $1.types;
+        }
+        ;
+
+FunctionParameters
+        : '(' Parameters_opt ')'
+        {
+          $$.parameters = $2.parameters;
+          $$.types = $2.types;
+        }
+        ;
+
+Parameters_opt
+        : /* empty */
+        {
+          $$.parameters = new ArrayList();
+          $$.types = new ArrayList();
+        }
+        | Parameters
+        {
+          $$.parameters = $1.parameters;
+          $$.types = $1.types;
+        }
+        ;
+
+Parameters
+        : Parameter
+        {
+          ($$.parameters = new ArrayList()).add($1.name);
+          ($$.types = new ArrayList()).add($1.type);
+        }
+        | Parameters ',' Parameter
+        {
+          ($$.parameters = $1.parameters).add($3.name);
+          ($$.types = $1.types).add($3.type);
+        }
+        ;
+
+Parameter
+        : ID Typing_opt
+        { $$.name = $1.svalue(); $$.type = $2.type; }
+        ;
+
+Expression_opt
+        : /* empty */
+        { $$.expression = Constant.VOID; $$.setSvalue("void"); }
+        | Expression
+        { $$.expression =  $1.expression; }
+        ;
+
+/**
+ * This nonterminal node rules express the several possible syntactic
+ * forms of an AQL expression:
+ * <ul>
+ * <li>a (possibly typed) untyped expression [see $UntypedExpression$];
+ * <li>an allocation expression [see $Allocation$];
+ * <li>an expression seen as value of a defined opaque type (whose
+ *     defining type is that of the expression) [see $as$];
+ * <li>an expression of opaque type being seen as a value of its underlying
+ *     defining type [see %$%] (<i><b>N.B.</b>: this has the same as  using
+ *     the prefix operator '<tt><b>strip</b></tt>'</i>); 
+ * <li>a parenthesized expression.
+ * </ul>
+ */
+Expression
+        : UntypedExpression Typing_opt
+        { ($$.expression = $1.expression).addType($2.type); }
+        | Allocation
+        { $$.expression = $1.expression; }
+        | Expression 'as' Type
+        { $$.expression = new HideType($1.expression,$3.type); }
+        | /**
+	   * The %$% constructs strips the following expression's opaque
+	   * type into its defining type.  This operator associates to the
+	   * right and may be repeated as long as the defining type is
+	   * itself opaque.
+	   */
+	  '$' Expression
+        { $$.expression = new OpenType($2.expression); }
+        | '(' Expression_opt ')'
+        { $$.expression = $2.expression; }
+        ;
+
+Allocation
+        : 'new' Type Dimensions_opt
+        {
+          setLocation($$);
+          $$.expression = allocation($2.type,$3.expressions);
+        }
+        | 'new' Type Dimensions '=' Expression
+        {
+          setLocation($$);
+          $$.expression = ArrayInitializer.construct($2.type,$3.expressions,$5.expression);
+        }
+        ;
+
+Dimensions_opt
+        : /* empty */
+        | Dimensions
+        { $$.expressions = $1.expressions; }
+        ;
+
+Dimensions
+        : Dimension
+        { ($$.expressions = new ArrayList()).add($1.expression);  }
+        | Dimensions Dimension
+        { ($$.expressions = $1.expressions).add($2.expression);  }
+        { $$.undo(); }
+        ;
+
+Dimension
+        : '[' UntypedExpression ']'
+        { $$.expression = $2.expression; }
+        ;
+
+UntypedExpression
+        : Literal
+        { $$.expression = $1.expression; }
+        | CollectionKind '{' Expressions_opt '}'
+	{ switch ($1.kind)
+		{
+		  case Type.BAG:
+		    $$.expression = makeBag($3.expressions);
+		    break;
+		  case Type.LIST:
+		    $$.expression = makeList($3.expressions);
+		    break;
+		  case Type.SET:
+		  default:
+		    $$.expression = makeSet($3.expressions);
+		}
+	}
+        | TupleExpression
+        { $$.expression = $1.expression; }
+        | Expression '!' Expression
+        { $$.expression = new ArrayToMap($1.expression,$3.expression); }
+        | '#[' ArrayExtension ']#'
+        { $$.expression = new ArrayExtension($2.elements,$2.indices); }
+        | ArraySlotExpression
+        { $$.expression = $1.expression; }
+        | OperatorExpression
+        { $$.expression = $1.expression; }
+        | 'function' FunctionParameters Expression
+        { $$.expression = abs($2.parameters,$2.types,$3.expression); }
+        | Expression Arguments
+        { $$.expression = app($1.expression,$2.expressions); }
+        | 'return' Expression_opt
+        { $$.expression = new ExitWithValue($2.svalue() == "void"?Constant.NULL():$2.expression); }
+        | 'if' UntypedExpression 'then' Expression 'else' Expression
+        { $$.expression = new IfThenElse($2.expression,$4.expression,$6.expression); }
+        | 'while' UntypedExpression 'do' Expression
+        { $$.expression = new Loop($2.expression,$4.expression); }
+        | 'let' Locals 'in' Expression
+        { $$.expression = new Let($2.parameters,$2.types,$2.expressions,$4.expression); }
+        | Location '=' Expression
+        { $$.expression = assignment($1.expression,$1.name,$3.expression); }
+        | Expression '.' Member
+        { $$.expression = memberapp($1.expression,$3.name,$3.arguments); }
+        | Sequence
+        { $$.expression = $1.expression; }
+        | '(' UntypedExpression ')'
+        { $$.expression = $2.expression; }
+        | Comprehension
+        { $$.expression = $1.expression; }
+        | 'foreach' '(' Qualifiers_opt ')' Expression_opt
+        { $$.expression = new Comprehension(tables,symbol("noop2"),Constant.VOID,
+                                            new Sequence($5.expression,Constant.VOID),
+                                            $3.patterns,$3.expressions,
+                                            Homomorphism.ENABLED_IN_PLACE).setNoLetWrapping();
+        }
+        | 'hom' '(' Expression ',' Expression ',' Expression ',' Expression ')'
+        { $$.expression = new Homomorphism($3.expression,$5.expression,
+                                           $7.expression,$9.expression).disableInPlace();
+        }
+        ;
+
+Literal
+        : INT
+        { $$.expression = new Int((int)$1.nvalue()); }
+        | CHAR // should check that there's exactly one character!
+        { $$.expression = new Char($1.svalue().charAt(0)); }
+        | REAL
+        { $$.expression = new Real($1.nvalue()); }
+        | STRING
+        { $$.expression = new StringConstant($1.svalue()); }
+        | 'true'
+        { $$.expression = Constant.TRUE(); }
+        | 'false'
+        { $$.expression = Constant.FALSE(); }
+        | 'null'
+        { $$.expression = Constant.NULL(); }
+        ;
+
+TupleExpression
+        : '<' TupleComponents '>'
+        { $$.expression = $2.expression; }
+        | TupleProjection
+        { $$.expression = $1.expression; }
+        ;
+
+TupleComponents
+        : Expressions_opt
+        { $$.expression = Tuple.newTuple($1.expressions); }
+        | NamedTupleComponents
+        { $$.expression = new NamedTuple($1.expressions,$1.fields); }
+        ;
+
+NamedTupleComponents
+        : NamedTupleComponent
+        { ($$.expressions = new ArrayList()).add($1.expression); ($$.fields = new ArrayList()).add($1.svalue()); }
+        | NamedTupleComponents ',' NamedTupleComponent
+        { ($$.expressions = $1.expressions).add($3.expression); ($$.fields = $1.fields).add($3.svalue()); }
+        ;
+ 
+NamedTupleComponent
+        : ID ':=' Expression
+        { $$.setSvalue($1.svalue()); $$.expression = $3.expression; }
+        ;
+
+TupleProjection
+        : UntypedExpression '@' TupleSelector
+        { $$.expression = new TupleProjection($1.expression,$3.selector); }
+        ;
+
+TupleSelector
+        : INT
+        { $$.selector = new Int((int)$1.nvalue()); }
+        | ID
+        { $$.selector = new StringConstant($1.svalue()); }
+        ;
+
+ArrayExtension
+        : Expressions
+        { $$.elements = $1.expressions; }
+        | IndexedExpressions
+        { $$.elements = $1.elements; $$.indices = $1.indices; }
+        ;
+
+IndexedExpressions
+        : IndexedExpression
+        { ($$.elements = new ArrayList()).add($1.element); ($$.indices = new ArrayList()).add($1.index); }
+        | IndexedExpressions ',' IndexedExpression
+        { ($$.elements = $1.elements).add($3.element); ($$.indices = $1.indices).add($3.index);  }
+        { $$.undo(); }
+        ;
+
+IndexedExpression
+        : UntypedExpression ':' Expression
+        { $$.index = $1.expression; $$.element = $3.expression; }
+        ;
+
+ArraySlotExpression
+        : Expression '[' Expression ']'
+        { $$.expression = new ArraySlot($1.expression,$3.expression); }
+        ;
+
+OperatorExpression
+        : Operator
+        { $$.expression = symbol($1.svalue()); }
+        | OPERATOR_ Expression
+	{ if ($1.svalue().equals("strip"))
+	    $$.expression = new OpenType($2.expression);
+	  else
+	    $$.expression = app(locateSymbol($1),$2.expression);
+	}
+        | Expression _OPERATOR
+        { $$.expression = app(locateSymbol($2),$1.expression); }
+        | Expression _OPERATOR_ Expression
+        { $$.expression = app(locateSymbol($2),$1.expression,$3.expression); }
+        ;
+
+Arguments
+        : '(' Expressions_opt ')'
+        { $$.expressions = $2.expressions; }
+        ;
+
+Expressions_opt
+        : /* empty */
+        { $$.expressions = new ArrayList(); }
+        | Expressions
+        { $$.expressions = $1.expressions; }
+        ;
+
+Expressions
+        : Expression
+        { ($$.expressions = new ArrayList()).add($1.expression); }
+        | Expressions ',' Expression
+        { ($$.expressions = $1.expressions).add($3.expression); }
+        { $$.undo(); }
+        ;
+
+Locals
+        : Local ';'
+        {
+          setLocation();
+          ($$.parameters = new ArrayList()).add($1.parameter);
+          ($$.expressions = new ArrayList()).add($1.expression);
+          ($$.types = new ArrayList()).add($1.type);
+        }
+        | Locals Local ';'
+        {
+          ($$.parameters = $1.parameters).add($2.parameter);
+          ($$.expressions = $1.expressions).add($2.expression);
+          ($$.types = $1.types).add($2.type);
+        }
+        { $$.undo(); }
+        ;
+
+Local
+        : Parameter Initialization_opt
+        { $$.parameter = $1.name; $$.type = $1.type; $$.expression = $2.expression; }
+        ;
+
+Location
+        : ID
+        { $$.name = $1.svalue(); }
+        | TupleProjection
+        { $$.expression = $1.expression; $$.name = ""; }
+        | ArraySlotExpression
+        { $$.expression = $1.expression; }
+        | Expression '.' ID
+        { $$.expression = $1.expression; $$.name = $3.svalue(); }
+        ;
+
+Member
+        : ID
+        { $$.name = $1.svalue(); }
+        | Operator Arguments
+        { $$.name = $1.svalue(); $$.arguments = $2.expressions; }
+        ;
+
+Sequence
+        : '{' ExpressionSequence_opt '}'
+        { $$.expression = seq($2.expressions); }
+        ;
+
+ExpressionSequence_opt
+        : /* empty */
+        { $$.expressions = new ArrayList(); }
+        | Expression ';'
+        { ($$.expressions = new ArrayList()).add($1.expression); }
+        { $$.undo(); }
+        | ExpressionSequence_opt Expression ';'
+        { ($$.expressions = $1.expressions).add($2.expression); }
+        { $$.undo(); }
+        ;
+
+Comprehension
+        :  Monoid '{' Expression '|' Qualifiers_opt '}'
+        { $$.expression = new Comprehension(tables,$1.operation,$1.identity,$3.expression,
+                                            $5.patterns,$5.expressions,(byte)$1.nvalue());
+        }
+        ;
+
+Monoid
+        : '[' Expression ',' Expression ']' InPlace_opt
+        {
+          $$.operation = $2.expression;
+          $$.identity = $4.expression;
+          $$.setSvalue($6.svalue());
+        }
+        ;
+
+InPlace_opt
+        : /* empty */
+        | '<' { $$.setNvalue(Homomorphism.ENABLED_IN_PLACE); }
+        | '>' { $$.setNvalue(Homomorphism.DISABLED_IN_PLACE); }
+        ;
+
+Qualifiers_opt
+        : /* empty */
+        | Qualifiers
+        {
+          $$.patterns = $1.patterns;
+          $$.expressions = $1.expressions;
+        }
+        ;
+
+Qualifiers
+        : Qualifier
+        {
+          ($$.patterns = new ArrayList()).add($1.pattern);
+          ($$.expressions = new ArrayList()).add($1.expression);
+        }
+        | Qualifiers ',' Qualifier
+        {
+          ($$.patterns = $1.patterns).add($3.pattern);
+          ($$.expressions = $1.expressions).add($3.expression);
+        }
+        { $$.undo(); }
+        ;
+
+Qualifier
+        : Expression
+        { $$.expression = $1.expression; }
+        | Expression '<-' Expression
+        { $$.pattern = $1.expression; $$.expression = $3.expression; }
+        ;
+
+%%
+
+/* ************************************************************************************* */
+/* *****************************   END  OF GRAMMAR  RULES   **************************** */
+/* ************************************************************************************* */

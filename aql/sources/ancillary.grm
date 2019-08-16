@@ -1,0 +1,1064 @@
+// FILE. . . . . /home/hak/hlt/src/hlt/language/jaccapps/aql/sources/ancillary.grm
+// EDIT BY . . . Hassan Ait-Kaci
+// ON MACHINE. . Hp-Dv7
+// STARTED ON. . Wed Oct 17 23:25:49 2012
+
+/**
+ * @version     Last modified on Thu Oct 18 02:28:40 2012 by hak
+ * @author      <a href="mailto:hak@acm.org">Hassan A&iuml;t-Kaci</a>
+ * @copyright   &copy; <a href="http://www.hassan-ait-kaci.net/">by the author</a>
+ */
+
+/* ************************************************************************************* */
+/* ********************************** ANCILLARY CODE *********************************** */
+/* ************************************************************************************* */
+
+/* ***** This is ancillary code for <a href="../docs/AQLDocs/AQL.html">AQL.grm</a> ***** */
+
+%{
+
+/* ************************************************************************************* */
+/* ********************************* GLOBAL VARIABLES ********************************** */
+/* ************************************************************************************* */
+
+  Tables tables = new Tables();
+  BuiltIns builtins = new BuiltIns(tables);
+  Sanitizer sanitizer = new Sanitizer();
+  TypeChecker typeChecker = new TypeChecker();
+  Compiler compiler = new Compiler();
+  Runtime runtime = new Runtime();
+  DisplayManager displayManager = runtime.displayManager();
+
+  Stack typeParameterTables = new Stack();
+  Stack typeParameterLists = new Stack();
+
+  ArrayList errors = new ArrayList();
+  boolean error, isShowingFields, isTiming, isMute, showTree;
+
+  long time;
+
+  Locatable location;
+
+  public final void initialize ()
+    {
+      //      Compiler.LCO_IS_EFFECTIVE = true;
+      //      Expression.VOID_ASSIGNMENTS = true;
+
+      Comprehension.OPAQUE_PARAMETERS = false;
+
+      TypeChecker.GIVES_DETAILS = true;
+      TypeChecker.ALLOWS_POSITIONAL_NAMED_TUPLES = true;
+      TypeChecker.ALLOWS_UNIFYING_OPAQUE_TUPLES = true;
+    }
+
+/* ************************************************************************************* */
+/* ****************************** EXPRESSION CONSTRUCTIONS ***************************** */
+/* ************************************************************************************* */
+
+  /**
+   * Returns the unary <tt>Application</tt> whose operand and argument are the specified
+   * expressions - in this order.
+   */
+  final Application app (Expression fun, Expression arg)
+    {
+      return new Application(fun,arg)/*.flatten()*/;
+    }
+
+  /**
+   * Returns the binary <tt>Application</tt> whose operand and arguments are the specified
+   * expressions - in this order.
+   */
+  final Application app (Expression fun, Expression arg1, Expression arg2)
+    {
+      return new Application(fun,arg1,arg2)/*.flatten()*/;
+    }
+
+  /**
+   * Returns the <tt>Application</tt> whose operand is the specified expression, and
+   * whose arguments are the expressions in the specified <tt>ArrayList</tt>.
+   */
+  final Application app (Expression fun, ArrayList args)
+    {
+      return new Application(fun,args)/*.flatten()*/;
+    }
+
+  /**
+   * Returns the <tt>Application</tt> whose operand is the specified expression, and
+   * whose arguments are the expressions in the specified array.
+   */
+  final Application app (Expression fun, Expression[] args)
+    {
+      return new Application(fun,args)/*.flatten()*/;
+    }
+
+  /**
+   * Returns the <tt>Abstraction</tt> whose formal variables are in the specified
+   * <tt>ArrayList</tt> (of strings), and whose body is the specified <tt>Expression</tt>.
+   * This will complain if there are duplicate variable names.
+   */
+  final Abstraction abs (ArrayList args, Expression body)
+    {
+      Abstraction abstraction = new Abstraction(args,body);
+
+      for (int i=args.size(); i-->0;)
+        if (i != args.indexOf(args.get(i)))
+          errors.add(staticSemanticsError("duplicate argument name: "
+					  +args.get(i),abstraction));
+
+      return abstraction;
+    }
+
+  /**
+   * Returns the <tt>Abstraction</tt> whose formal variables are the first specified
+   * <tt>ArrayList</tt> (of strings), each of whose type is at the corresponding index
+   * in the second <tt>ArrayList</tt> (of types), and whose body is the specified
+   * <tt>Expression</tt>. This will complain if there are duplicate variable names.
+   */
+  final Abstraction abs (ArrayList args, ArrayList types, Expression body)
+    {
+      Abstraction abstraction = abs(args,body);
+
+      for (int i=args.size(); i-->0;)
+        abstraction.parameter(i).addType((Type)types.get(i));
+
+      return abstraction;
+    }
+
+  /**
+   * Returns the <tt>Definition</tt> for the name specified as first argument,
+   * with (possible) arguments and corresponding types are specified in the second
+   * and third <tt>ArrayList</tt>s, and whose body is the given <tt>Expression</tt>.
+   */
+  final Definition def (String name, ArrayList args, ArrayList types, Expression body)
+    {
+      return def(name,args,types,body,false);
+    }
+
+  /**
+   * Returns the <tt>Definition</tt> for the name specified as first argument,
+   * with (possible) arguments and corresponding types are specified in the second
+   * and third <tt>ArrayList</tt>s, and whose body is the given <tt>Expression</tt>,
+   * along with a boolean flag to indicate whether this definition is that of a class
+   * field.
+   */
+  final Definition def (String name, ArrayList args, ArrayList types,
+			Expression body, boolean isField)
+    {
+      Abstraction abstraction = abs(args,body);
+
+      for (int i=args.size(); i-->0;)
+        {
+          Type type = (Type)types.get(i);
+          if (type != null)
+            abstraction.parameter(i).addType(type);
+        }
+
+      Definition definition = new Definition(tables,name,abstraction,isField);
+
+      return definition;
+    }
+
+  /**
+   * If the specified <tt>ArrayList</tt> of <tt>Expression</tt>s contains more than one
+   * element, this will return the <tt>Sequence</tt> expression consisting of all these
+   * expressions. If there is only one element in the list, this expression is returned.
+   * If the list is empty, the <tt>void</tt> constant is returned.
+   */
+  final Expression seq (ArrayList expressions)
+    {
+      if (expressions.isEmpty())
+        return Constant.VOID;
+
+      if (expressions.size() == 1)
+        return (Expression)expressions.get(0);
+
+      return new Sequence(expressions);
+    }
+
+  /**
+   * This returns an assignment expression. The exact nature of this assignment depends
+   * on whether:
+   *
+   * <ul>
+   * <li> <b>the first argument is <tt>null</tt></b>:<br>
+   *      in which case the assignment returned is a <tt>DummyAssignment</tt> assigning
+   *      the value of the third argument to the symbol specified as the second argument
+   *      (which will later be determined to be either local or global by the
+   *       <tt>Sanitizer</tt>);
+   * <li> <b>the first argument is <i>not</i> <tt>null</tt>, but the second argument is
+   *      <tt>null</tt></b>:<br>
+   *      in which case the assignment returned is an <tt>ArraySlotAssignment</tt>
+   *      interpreting the first argument as an array slot to be set to the value of
+   *      the third argument; 
+   * <li> <b>neither the first nor second argument is <tt>null</tt></b>:<br>
+   *      in which case:
+   *        <ul>
+   *        <li><b>the second argument is the empty string:</b>:<br>
+   *            in which case the assignment returned is a <tt>TupleUpdate</tt>
+   *            interpreting the first argument as a tuple component to be set to
+   *            the value of the third argument; 
+   *        <li><b>the second argument is <i>not</i> the empty string:</b>:<br>
+   *            in which case the assignment returned is a <tt>FieldUpdate</tt>
+   *            interpreting the first argument as an object, the second argument
+   *            as the symbol of one of its fields to be set to the value of the
+                third argument.
+   *        </ul>
+   * </ul>
+   */
+  final Expression assignment (Expression target, String id, Expression value)
+    {
+      if (target == null)
+        return new DummyAssignment(tables,id,value);
+
+      if (id == null)
+        return new ArraySlotUpdate(target,value);
+
+      if (id.intern() == "")
+        return new TupleUpdate(target,value);
+
+      return new FieldUpdate(target,(Global)locate(new Global(tables,id)),value);
+    }
+
+  /**
+   * Returns an <tt>Application</tt> corresponding to an object member written using
+   * an object-oriented "message-passing" style (<i>i.e.</i>, using the dot notation):
+   * this method's first argument is the object, the second is the member's name (either
+   * field or method), and the last argument is the (possibly <tt>null</tt>) list of
+   * expressions passed as arguments. This simply builds a normal application whose
+   * operand is the member's name and arguments is the list of specified arguments
+   * prepended with the object as first argument.
+   */
+  final Expression memberapp (Expression object, String member, ArrayList arguments)
+    {
+      if (arguments == null)
+        (arguments = new ArrayList()).add(object);
+      else
+        if (arguments.isEmpty())
+          {
+            arguments.add(object);
+            arguments.add(Constant.VOID);
+          }
+        else
+          arguments.add(0,object);
+
+      return new Application(locate(new Global(tables,member)),arguments)/*.flatten()*/;
+    }
+
+  /**
+   * Returns a <tt>Dummy</tt> expression that may stand for either a <tt>Global</tt>
+   * or <tt>Local</tt> name as must be determined by the <tt>Sanitizer</tt>.
+   */
+  final Dummy symbol (String x)
+    {
+      return new Dummy(tables,x);
+    }
+
+/* ************************************************************************************* */
+/* ******************************* SEMANTIC PROCESSING ********************************* */
+/* ************************************************************************************* */
+
+  final void processPragma (String pragma, String argument)
+    {
+      setLocation();
+
+      if (pragma == "exit") Main.exit();
+
+      display("*** Pragma '"+pragma+"' - ");
+
+      if (pragma == "include")
+        {
+          if (argument == null)
+            {
+              complain(syntaxError("missing file name in #include pragma",location));
+              return;
+            }
+
+          displayLine("reading from file: "+argument);
+
+          try
+            {
+              ((Tokenizer)input).include(argument);
+            }
+          catch (FileNotFoundException e)
+            {
+              complain(syntaxError("file not found: "+argument,location));
+            }
+          catch (CircularInclusionException e)
+            {
+              complain(syntaxError("circular file inclusion of file: "+argument,location));
+            }
+
+          return;
+        }
+
+      if (pragma == "mute")
+        {
+          isMute = !isMute;
+          display("muted output has been turned "+(isMute ? "on" : "off")+"...\n");
+          if (isMute) displayManager.println("...");
+          return;
+        }
+
+      if (pragma == "tree")
+        {
+	  parseTreeType = (showTree = !showTree) ? COMPACT_TREE : NO_TREE;
+          display("parse tree display has been turned "+(showTree ? "on" : "off")+"...\n");
+          return;
+        }
+
+      if (pragma == "time")
+        {
+          isTiming = !isTiming;
+          time = 0L;
+          display("execution timing has been turned "+(isTiming ? "on" : "off")+"...\n");
+          return;
+        }
+
+      if (pragma == "gc")
+        {
+          display("\n");
+          Misc.forceGC(!isMute,displayManager.getOutputStream());
+          return;
+        }
+
+      if (pragma == "syntax")
+        {
+          toggleTrace();
+          display("parser trace has been turned "+(tracingIsOn() ? "on" : "off")+"...\n");
+          return;
+        }
+
+      if (pragma == "typing")
+        {
+          typeChecker.toggleTrace();
+          display("type-checking trace has been turned "+(typeChecker.isTracing() ? "on" : "off")+"...\n");
+          return;
+        }
+
+      if (pragma == "trace")
+        {
+          runtime.toggleTrace();
+          display("runtime trace has been turned "+(runtime.isTracing() ? "on" : "off")+"...\n");
+          return;
+        }
+
+      if (pragma == "code")
+        {
+          compiler.toggleShowCode();
+          display("compiler code display has been turned "+(compiler.isShowingCode() ? "on" : "off")+"...\n");
+          return;
+        }
+
+      if (pragma == "fields")
+        {
+          isShowingFields = !isShowingFields;
+          display("class field's code display has been turned "+(isShowingFields ? "on" : "off")+"...\n");
+          return;
+        }
+
+      if (pragma == "defined")
+        {
+          tables.showDefined();
+          return;
+        }
+
+      if (pragma == "symbols")
+        {
+          tables.showOrderedSymbols();
+          return;
+        }
+
+      if (pragma == "types")
+        {
+          tables.showTypes();
+          return;
+        }
+
+      if (pragma == "help")
+        {
+          helpPragma();
+          return;
+        }
+
+      display("unknown pragma (ignored)");
+      helpPragma();
+    }
+
+  final void helpPragma ()
+    {
+      display("\n*** Known pragmas:");
+      display("\n\t--------  ------");
+      display("\n\t pragma:  effect");
+      display("\n\t--------  ------");
+      display("\n\t   exit:  exit AQL");
+      display("\n\t   mute:  toggle on/off intermediate displays such as 'value : type', etc...");
+      display("\n\t   tree:  toggle on/off graphical display of syntax tree");
+      display("\n\tinclude:  start reading from the file (name specified as a quoted string)");
+      display("\n\t   time:  toggle on/off execution timing");
+      display("\n\t     gc:  force immediate garbage collection");
+      display("\n\t syntax:  toggle on/off parser tracing");
+      display("\n\t typing:  toggle on/off typecheck tracing");
+      display("\n\t  trace:  toggle on/off runtime tracing");
+      display("\n\t   code:  toggle on/off compiler code display");
+      display("\n\t fields:  toggle on/off class fields' code display");
+      display("\n\tdefined:  list all the currently defined symbols");
+      display("\n\tsymbols:  list all the known (built-in and defined) symbols");
+      display("\n\t  types:  list all the registered (declared or not) types");
+      display("\n\t   help:  list this information");
+      display("\n\n");
+    }
+
+  final void processOperator (String operator, String specifier, int precedence)
+    {
+      setLocation();
+
+      try
+        {
+          Operator(operator,specifier,precedence);
+          displayLine("*** Declared operator: "+operator+", "+specifier+", "+precedence);
+        }
+      catch (NonFatalParseErrorException e)
+        {
+          complain(syntaxError(e.msg(),location));
+        }
+    }
+
+  final void processType (String symbol, Type type)
+    {
+      setLocation();
+
+      if (!errors())
+        {
+          try
+            {
+              checkSafeGlobalType(symbol,type);
+              tables.symbol(symbol).getCodeEntry(type);
+              Type.resetNames();
+              displayLine("*** Declared type for "+symbol+" : "+type.toQuantifiedString());
+            }
+          catch (DefinitionException e)
+            {
+              complain(staticSemanticsError(e.msg(),location));
+            }
+        }
+    }
+
+  final void checkSafeGlobalType (String symbol, Type type)
+    {
+      if (type.isGlobalUnsafe())
+        {
+          Type.resetNames();
+          throw new DefinitionException("'"+symbol+"' has unsafe type : "+
+                                        type.toQuantifiedString()).setExtent(location);
+        }
+    }
+
+  final void checkLegalDefinition (Definition def, Type type)
+    {
+      if (type.isVoid() && def.isSetOnEvaluation())
+        throw new TypingErrorException("can't assign void: "+def.symbol()).setExtent(location);
+
+      checkSafeGlobalType(def.symbol().name(),type);
+    }
+
+  final Expression makeSet (ArrayList expressions)
+    {
+      return expressions.isEmpty() ? new NewSet() : new NewSet(expressions);
+    }
+
+  final Expression makeBag (ArrayList expressions)
+    {
+      return expressions.isEmpty() ? new NewBag() : new NewBag(expressions);
+    }
+
+  final Expression makeList (ArrayList expressions)
+    {
+      return expressions.isEmpty() ? new NewList() : new NewList(expressions);
+    }
+
+  final void processExpression (Expression expression)
+    {
+      setLocation();
+
+      Expression exp = compile(expression);
+
+      if (!error)
+        {
+          try
+            {
+              Type type = exp.checkedType();
+
+              time = System.currentTimeMillis();
+              runtime.run(compiler.code());
+              time = System.currentTimeMillis() - time;
+
+              Type.resetNames();
+              displayManager.clearTags();
+              String s = " : " + type.toQuantifiedString();
+
+              if (type.isVoid())
+                s = displayManager.displayVoid() + s;
+              else
+                switch (runtime.resultSort())
+                  {
+                  case Type.INT_SORT:
+                    s = displayManager.displayForm(runtime.intResult(),type) + s;
+                    break;
+                  case Type.REAL_SORT:
+                    s = displayManager.displayForm(runtime.realResult()) + s;
+                    break;
+                  default:
+                    s = displayManager.displayForm(runtime.objectResult(),type) + s;
+                    break;
+                  }
+              displayLine(s);
+            }
+          catch (ArrayIndexOutOfBoundsException e)
+            {
+              complain(dynamicSemanticsError("(array bound violation)",exp));
+              //e.printStackTrace();
+            }
+          catch (DynamicSemanticsErrorException e)
+            {
+              complain(dynamicSemanticsError(e.msg(),exp));
+              //e.printStackTrace();
+            }
+          catch (Exception e)
+            {
+              complain(dynamicSemanticsError(e.toString(),exp));
+              e.printStackTrace();
+            }
+        }
+    }
+
+  final void processDefinition (Expression definition)
+    {
+      compile(definition);
+      if (!error)
+        {
+          Type.resetNames();
+          display("*** Defined "+((Definition)definition).symbol()+
+                  " : "+definition.checkedType().toQuantifiedString()+"\n");
+        }
+    }
+
+  final void processDefinition (String name, ArrayList parameters, ArrayList types,
+				Expression expression)
+    {
+      setLocation();
+      if (parameters == null)
+        processDefinition(locate(new Definition(tables,name,expression)));
+      else
+        processDefinition(locate(def(name,parameters,types,expression)));
+    }
+
+  final void processEvaluatedDefinition (String name, ArrayList parameters, ArrayList types,
+					 Expression expression)
+    {
+      setLocation();
+      expression = parameters == null ? locate(new Definition(tables,name,expression))
+                                      : locate(def(name,parameters,types,expression));
+      processDefinition(((Definition)expression).setOnEvaluation());
+      if (!error)
+        processExpression(locate(new Global(tables,name).addType(expression.checkedType())));
+    }
+
+  final void processTypeAlias (String name, Type type)
+    {
+      if (!errors())
+        {
+          try
+            {
+              displayLine("*** Defined type alias "
+			  +tables.defineTypeAlias(name,type,typeParameterList()));
+            }
+          catch (StaticSemanticsErrorException e)
+            {
+              complain(staticSemanticsError(e.msg(),location));
+            }
+        }
+    }
+
+  final void processNewType (String name, Type type)
+    {
+      if (!errors())
+        {
+          try
+            {
+              displayLine("*** Defined new type "
+			  +tables.defineNewType(name,type,typeParameterList()));
+            }
+          catch (StaticSemanticsErrorException e)
+            {
+              complain(staticSemanticsError(e.msg(),location));
+            }
+        }
+    }
+
+  final void processStruct (String name, ArrayList fields, ArrayList types)
+    {
+      if (!errors())
+        {
+          try
+            {
+              Type type = new NamedTupleType(types,fields);
+              displayLine("*** Defined new type "
+			  +tables.defineNewType(name,type,typeParameterList()));
+              for (int i=0; i<fields.size(); i++)
+                {
+                  String field = (String)fields.get(i);
+		  TupleProjection projection =
+		    new TupleProjection(symbol("tuple").addType(tables.getType(name)),
+					field);
+
+                  processDefinition(new Definition(tables,
+                                                   field,
+                                                   "tuple",
+                                                   projection).setIsProjection());
+                }
+            }
+          catch (StaticSemanticsErrorException e)
+            {
+              complain(staticSemanticsError(e.msg(),location));
+            }
+        }
+    }
+
+  final void processClass (String className,
+                           ArrayList memberNames, ArrayList memberTypes, ArrayList fieldInits,
+                           ArrayList methodNames, ArrayList methodParameters,
+                           ArrayList methodParameterTypes, ArrayList methodBodies,
+                           Locatable extent)
+    {
+      if (!errors())
+        {
+          ClassType type = null;
+
+          try
+            {
+              type
+                = tables.declareClass(className,memberNames,memberTypes,fieldInits,
+				      typeParameterList());
+
+              ArrayList fieldSymbols = new ArrayList();
+              ArrayList fieldExpressions = new ArrayList();
+
+              for (int i=0; i<memberNames.size(); i++)
+                if (fieldInits.get(i) != null)
+                  {
+                    fieldSymbols.add(memberNames.get(i));
+                    fieldExpressions.add(((Expression)fieldInits.get(i))
+					 .addType((Type)memberTypes.get(i)));
+                  }
+
+              defineFields(type,fieldSymbols,fieldExpressions);
+              defineMethods(type,methodNames,methodParameters,methodParameterTypes,
+			    methodBodies);
+
+              Type.resetNames();
+              displayLine("*** class "+type.toFullString());
+            }
+          catch (StaticSemanticsErrorException e)
+            {
+              complain(staticSemanticsError(e.msg(),extent));
+              if (type != null)
+                type.undeclareClass(tables);
+            }
+        }
+    }
+
+  final void defineFields (ClassType classType, ArrayList fields, ArrayList expressions)
+    throws StaticSemanticsErrorException
+    {
+      for (int i=0; i<fields.size(); i++)
+        defineField(classType,(String)fields.get(i),(Expression)expressions.get(i));
+    }
+
+  final void defineField (ClassType classType, String field, Expression expression)
+    throws StaticSemanticsErrorException
+    {
+      ArrayList parameters = new ArrayList();
+      ArrayList types = new ArrayList();
+
+      parameters.add("this");
+      types.add(classType);
+
+      Definition def = (Definition)uncaughtCompile(def(field,parameters,types,expression,true));
+
+      if (isShowingFields)
+        def.codeEntry().showCode();
+    }
+
+  final void defineMethods (ClassType classType, ArrayList methodNames,
+			    ArrayList methodParameters, ArrayList methodParameterTypes,
+			    ArrayList methodBodies)
+    throws StaticSemanticsErrorException
+    {
+      if (methodNames == null)
+        return;
+
+      for (int i=0; i<methodNames.size(); i++)
+        {
+          ArrayList args = (ArrayList)methodParameters.get(i);
+          ArrayList argTypes = (ArrayList)methodParameterTypes.get(i);
+
+          if (args == null)
+            {
+              (args = new ArrayList()).add("this");
+              (argTypes = new ArrayList()).add(classType);
+            }
+          else
+            if (args.isEmpty())
+              {
+                args.add("this");
+                argTypes.add(classType);
+                args.add("void");
+                argTypes.add(Type.VOID);
+              }
+            else
+              {
+                args.add(0,"this");
+                argTypes.add(0,classType);
+              }
+
+          uncaughtCompile(def((String)methodNames.get(i),args,argTypes,
+			      (Expression)methodBodies.get(i)));
+
+	  // NB - this is not good enough: we must constrain the type of the method
+	  // to those declared for this method name for this class. Otherwise, this
+	  // may find ambiguities where there should be none. For example, "class Foo
+	  // { method f : int -> int; } { f(x) = x+1; }" is ambiguous since the
+	  // definition does not know that the 'f' being defined is necessarily the
+	  // one with an int argument and int result. FIX LATER: add a list of types
+	  // to Definition to use for restraining the type of method definition to be
+	  // compatible to one of those in it - when typing a method definition,
+	  // passing the list of types declared in the interface to the definition in
+	  // which the typeCheck method should enforce this.
+        }
+    }
+
+  final Expression allocation (Type type, ArrayList dimensions)
+    {
+      if (type == null) // an error has happened...
+        return Constant.NULL();
+
+      if (dimensions != null)
+        return new NewArray(type,dimensions);
+
+      switch (type.kind())
+        {
+        case Type.CLASS:
+          return new NewObject(type);
+        case Type.SET:
+          return new NewSet(((SetType)type).baseType());
+        case Type.BAG:
+          return new NewBag(((BagType)type).baseType());
+        case Type.LIST:
+          return new NewList(((ListType)type).baseType());
+        case Type.DEFINED:
+          return new HideType(allocation(((DefinedType)type).definition(),null),type);
+        }
+
+      errors.add(staticSemanticsError("can't allocate an object of type "+type,location));
+      return Constant.NULL();
+    }
+
+  final Expression uncaughtCompile (Expression expression) throws StaticSemanticsErrorException
+    {
+      expression = sanitizer.sanitizeNames(expression);
+      expression.typeCheck(typeChecker.reset());
+      expression.setCheckedType();
+
+      ArrayList types = new ArrayList();
+      types.add(expression.checkedType());
+
+      typeChecker.remainingTypes(expression,types);
+      if (types.size() > 1)
+        throw new TypingErrorException("ambiguous typing:"+list(types)).setExtent(location);
+
+      if (expression instanceof Definition)
+        {
+          Definition def = (Definition)expression;
+          checkLegalDefinition(def,def.checkedType());
+          def.registerCodeEntry();
+        }
+
+      sanitizer.sanitizeSorts(expression);
+      compiler.compile(expression);
+      return expression;
+    }
+
+  final boolean errors ()
+    {
+      error = false;
+      for (int i=0; i<errors.size(); i++)
+        {
+          complain((Error)errors.get(i));
+          error = true;
+        }
+      errors.clear();
+      return error;
+    }
+
+  final Expression compile (Expression expression)
+    {
+      if (!errors())
+        {
+          try
+            {
+              expression = uncaughtCompile(expression);
+            }
+          catch (StaticSemanticsErrorException e)
+            {
+              complain(staticSemanticsError(e.msg(),e.extent()));
+              error = true;
+            }
+        }
+
+      return expression;
+    }
+
+  final static String list (ArrayList lst)
+    {
+      StringBuffer buf = new StringBuffer(" ");
+
+      for (int i=0; i<lst.size(); i++)
+        {
+          Type.resetNames();
+          buf.append((i==0?"":", ")+((Type)lst.get(i)).toQuantifiedString());
+        }
+
+      buf.append(" ");
+
+      return buf.toString();
+    }
+
+  final void displayAllTypes (Expression expression)
+    {
+      expression = sanitizer.sanitizeNames(expression);
+      ArrayList types = new ArrayList();
+      typeChecker.allTypes(expression,types);
+
+      if (types.size() == 0)
+        complain(staticSemanticsError("no typing possible for "+expression,expression));
+      else
+        {
+          display("*** Possible typing"+(types.size()>1?"s":"")+" found:\n");
+          for (int i=0; i<types.size(); i++)
+            {
+              Type.resetNames();
+              display("\n\t"+((Type)types.get(i)).toQuantifiedString());
+            }
+        }
+      newLine();
+    }
+
+/* ************************************************************************************* */
+/* **********************************   HELP   FUNCTIONS   ***************************** */
+/* ************************************************************************************* */
+
+  /**
+   * Returns a static semantics error object with specified message.
+   */
+  final Error staticSemanticsError (String msg)
+    {
+      return new Error().setLabel("Static Semantics Error: ").setMsg(msg);
+    }
+
+  /**
+   * Returns a static semantics error object with specified message, and situated
+   * as the specifed <tt>Locatable</tt> extent.
+   */
+  final Error staticSemanticsError (String msg, Locatable extent)
+    {
+      return staticSemanticsError(msg).setExtent(extent);
+    }
+
+  /**
+   * Returns a dynamic semantics (<i>i.e.</i>, execution) error object with specified message.
+   */
+  final Error dynamicSemanticsError (String msg)
+    {
+      return new Error().setLabel("Dynamic Semantics Error: ").setMsg(msg);
+    }
+
+  /**
+   * Returns a dynamic semantics (<i>i.e.</i>, execution) error object with specified message,
+   * and situated as the specifed <tt>Locatable</tt> extent.
+   */
+  final Error dynamicSemanticsError (String msg, Locatable extent)
+    {
+      return dynamicSemanticsError(msg).setExtent(extent);
+    }
+
+  /**
+   * This method is used to situate an expression's abstract syntax with respect
+   * to its concrete syntax origin (specified as the given <tt>Locatable</tt>).
+   */
+  final Expression locate (Expression e, Locatable l)
+    {
+      return e.setExtent(l);
+    }
+
+  /**
+   * This method is used to situate an expression's abstract syntax with the
+   * extent of the latest <tt>location</tt>.
+   */
+  final Expression locate (Expression e)
+    {
+      return e.setExtent(location);
+    }
+
+  final Expression locateSymbol (ParseNode node)
+    {
+      return locate(symbol(node.svalue()),node);
+    }
+
+  /**
+   * Returns the latest table of type parameters (forming a quantified type scope).
+   */
+  final HashMap typeParameterTable ()
+    {
+      return (HashMap)typeParameterTables.peek();
+    }
+
+  /**
+   * Returns the latest list of type parameters in the order they were specified (forming
+   * a quantified type scope).
+   */
+  final ArrayList typeParameterList () throws StaticSemanticsErrorException
+    {
+      return (ArrayList)typeParameterLists.peek();
+    }
+
+  /**
+   * Pushes a new scope of quantified type parameters in the type parameters stack.
+   */
+  final void pushTypeParameters ()
+    {
+      typeParameterTables.push(new HashMap());
+      typeParameterLists.push(new ArrayList());
+    }
+
+  /**
+   * Pops the type parameters stack - in effect, leaving the latest a quantified type scope.
+   */
+  final void popTypeParameters ()
+    {
+      typeParameterTables.pop();
+      typeParameterLists.pop();
+    }
+
+  /**
+   * Looks up the current nesting of quantified type scopes (<i>i.e.</i>, the type
+   * parameters stack), to determine if the specified symbol is a type parameter - in
+   * which case it returns it - or not - in which case it returns <tt>null</tt>. The
+   * scopes are visited from the inside out in order to take nested quantification
+   * into account.
+   */
+  final TypeParameter getTypeParameter (String symbol)
+    {
+      for (int i=typeParameterTables.size()-1; i>=0; i--)
+        {
+          TypeParameter type = (TypeParameter)((HashMap)typeParameterTables.get(i)).get(symbol);
+          if (type != null) return type;
+        }
+
+      return null;
+    }
+
+  /**
+   * Registers the specified string as the name of a quantified type parameter in the
+   * latest type parameter scope. Reports an error if the type parameter is a
+   * duplicate.
+   */
+  final void registerTypeParameter (String symbol)
+    {
+      if (getTypeParameter(symbol) == null)
+        {
+          TypeParameter type = new TypeParameter();
+          typeParameterTable().put(symbol,type);
+          typeParameterList().add(type);
+        }
+      else
+        errors.add(staticSemanticsError("duplicate type parameter: "+symbol,location));
+
+    }
+
+  /**
+   * Flushes the parser's token stack (<i>i.e.</i>, commits all token choices as
+   * definitively valid), and prints out a prompt if needed for interactive input.
+   */
+  final void commitParse () throws IOException
+    {
+      cutAll();
+      ((Tokenizer)input).prompt();
+    }
+
+  /**
+   * Sets the location to that of the specified <tt>Locatable</tt>.
+   */
+  final void setLocation (Locatable locatable)
+    {
+      location = locatable;
+    }
+
+  /**
+   * Sets the location to that of the current parse node (<i>i.e.</i>, the node
+   * currently at the top of the parse stack).
+   */
+  final void setLocation ()
+    {
+      setLocation(currentNode());
+    }
+
+  public final void setOutputStream (PrintStream stream)
+    {
+      displayManager.setOutputStream(stream);
+    }
+
+  /**
+   * Displays the specified string on the standard output stream.
+   */
+  final void display (String s)
+    {
+      if (isMute) return;
+
+      displayManager.print(s);
+    }
+
+  /**
+   * Displays the specified string on the standard output stream, and ends it with a newline.
+   */
+  final void displayLine (String s)
+    {
+      if (isMute) return;
+
+      displayManager.println(s);
+
+      if (isTiming)
+        displayManager.println("*** Execution time = "+time+" ms");
+    }
+
+  /**
+   * Outputs a newline on the standard output stream.
+   */
+  final void newLine ()
+    {
+      displayManager.println();
+    }
+
+  /**
+   * Invokes this parser's error manager's reporting error method with the specified
+   * <tt>Error</tt>.
+   */
+  final void complain (Error error)
+    {
+      errorManager().reportError(error);
+    }
+
+%}
+
+/* ************************************************************************************* */
+/* *****************************  END OF ANCILLARY CODE  ******************************* */
+/* ************************************************************************************* */

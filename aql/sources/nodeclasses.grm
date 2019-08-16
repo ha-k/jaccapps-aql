@@ -1,0 +1,401 @@
+// FILE. . . . . /home/hak/hlt/src/hlt/language/jaccapps/aql/sources/nodeclasses.grm
+// EDIT BY . . . Hassan Ait-Kaci
+// ON MACHINE. . Hp-Dv7
+// STARTED ON. . Wed Oct 17 23:56:44 2012
+
+/**
+ * This is an auxiliary file for the <a href="../docs/AQLDoc/AQL.html">AQL
+ * language grammar</a> defining the node classes for the objects used in
+ * its semantic rules.
+ * 
+ * @version     Last modified on Thu Oct 18 00:32:44 2012 by hak
+ * @author      <a href="mailto:hak@acm.org">Hassan A&iuml;t-Kaci</a>
+ * @copyright   &copy; <a href="http://www.hassan-ait-kaci.net/">by the author</a>
+ */
+
+/* ************************************************************************************* */
+/* **************************  AQL GRAMMAR'S NODE CLASSES  ***************************** */
+/* ************************************************************************************* */
+
+%nodeclass Typing_opt
+  {
+    Type type;
+  }
+
+%nodeclass Typing extends Typing_opt
+  {
+  }
+
+%nodeclass Type extends Typing_opt
+  {
+  }
+
+%nodeclass Type_opt extends Type
+  {
+  }
+
+%nodeclass TypeConstant extends Type
+  {
+  }
+
+%nodeclass PrimitiveType extends TypeConstant
+  {
+  }
+
+%nodeclass FunctionType extends Type
+  {
+  }
+
+%nodeclass TupleType extends Type
+  {
+  }
+
+%nodeclass TupleTypeComponents extends TupleType
+  {
+  }
+
+%nodeclass NamedTupleTypeComponents extends Types
+  {
+    ArrayList fields;
+
+    void undo ()
+      {
+        super.undo();
+        Utilities.popList(fields);
+      }
+  }
+
+%nodeclass NamedTupleTypeComponent extends Typing
+  {
+  }
+
+%nodeclass ArrayType extends Type
+  {
+  }
+
+%nodeclass IndexType extends Type
+  {
+  }
+
+%nodeclass MapIndexType extends IndexType
+  {
+  }
+
+%nodeclass CollectionType extends Type
+  {
+  }
+
+%nodeclass SetType extends CollectionType
+  {
+  }
+
+%nodeclass SetKind_opt extends CollectionKind
+  {
+  }
+
+%nodeclass SetKind extends SetKind_opt 
+  {
+  }
+
+%nodeclass CollectionKind
+  {
+    int kind = Type.SET;
+  }
+
+%nodeclass NonSetKind
+  {
+    int kind = Type.BAG;
+  }
+
+%nodeclass IntRangeType extends Type
+  {
+  }
+
+%nodeclass RealRangeType extends Type
+  {
+  }
+
+%nodeclass TypeTerm extends Type
+  {
+  }
+
+%nodeclass Types_opt
+  {
+    ArrayList types;
+
+    void undo ()
+      {
+        Utilities.popList(types);
+      }
+  }
+
+%nodeclass Types extends Types_opt
+  {
+  }
+
+%nodeclass Interface
+  {
+    ArrayList symbols;
+    ArrayList types;
+    ArrayList expressions;
+
+    void undo ()
+      {
+        Utilities.popList(symbols);
+        Utilities.popList(types);
+        Utilities.popList(expressions);
+      }
+  }
+
+%nodeclass MemberDeclarations_opt extends Interface
+  {
+  }
+
+%nodeclass MemberDeclaration locates expression
+  {
+    String symbol;
+    Type type;
+    Expression expression;
+  }
+
+%nodeclass Initialization_opt extends Expression
+  {
+  }
+
+%nodeclass Implementation_opt
+  {
+    ArrayList symbols;
+    ArrayList parameters;
+    ArrayList types;
+    ArrayList expressions;
+
+    void undo ()
+      {
+        Utilities.popList(symbols);
+        Utilities.popList(parameters);
+        Utilities.popList(types);
+        Utilities.popList(expressions);
+      }
+  }
+
+%nodeclass Definitions_opt extends Implementation_opt
+  {
+  }
+
+%nodeclass Definition locates expression
+  {
+    String symbol;
+    ArrayList parameters;
+    ArrayList types;
+    Expression expression;
+  }
+
+%nodeclass FunctionParameters_opt
+  {
+    ArrayList parameters;
+    ArrayList types;
+  }
+
+%nodeclass FunctionParameters extends FunctionParameters_opt
+  {
+  }
+
+%nodeclass Parameters_opt extends FunctionParameters
+  {
+  }
+
+%nodeclass Parameters extends Parameters_opt
+  {
+  }
+
+%nodeclass Parameter
+  {
+    String name;
+    Type type;
+  }
+
+%nodeclass Expression locates expression
+  {
+    Expression expression;
+  }
+
+%nodeclass Expression_opt extends Expression
+  {
+  }
+
+%nodeclass Allocation extends Expression
+  {
+  }
+
+%nodeclass UntypedExpression extends Expression
+  {
+  }
+
+%nodeclass Literal extends Expression
+  {
+  }
+
+%nodeclass TupleExpression extends Expression
+  {
+  }
+
+%nodeclass TupleComponents extends TupleExpression
+  {
+  }
+
+%nodeclass NamedTupleComponents extends Expressions
+  {
+    ArrayList fields;
+
+    void undo ()
+      {
+        super.undo();
+        Utilities.popList(fields);
+      }
+  }
+
+%nodeclass NamedTupleComponent extends Expression
+  {
+  }
+
+%nodeclass TupleProjection extends TupleExpression
+  {
+  }
+
+%nodeclass TupleSelector locates selector
+  {
+    Constant selector;
+  }
+
+%nodeclass ArrayExtension
+  {
+    ArrayList elements;
+    ArrayList indices;
+  }
+
+%nodeclass IndexedExpressions extends ArrayExtension
+  {
+    void undo ()
+      {
+        Utilities.popList(elements);
+        Utilities.popList(indices);
+      }
+  }
+
+%nodeclass IndexedExpression
+  {
+    Expression element;
+    Expression index;
+  }
+
+%nodeclass ArraySlotExpression extends Expression
+  {
+  }
+
+%nodeclass OperatorExpression extends Expression
+  {
+  }
+
+%nodeclass Arguments
+  {
+    ArrayList expressions;
+
+    void undo ()
+      {
+        Utilities.popList(expressions);
+      }
+  }
+
+%nodeclass Expressions_opt extends Arguments
+  {
+  }
+
+%nodeclass Expressions extends Expressions_opt
+  {
+  }
+
+%nodeclass Dimensions extends Arguments
+  {
+  }
+
+%nodeclass Dimensions_opt extends Dimensions
+  {
+  }
+
+%nodeclass Dimension extends UntypedExpression
+  {
+  }
+
+%nodeclass Locals
+  {
+    ArrayList parameters;
+    ArrayList expressions;
+    ArrayList types;
+
+    void undo ()
+      {
+        Utilities.popList(parameters);
+        Utilities.popList(expressions);
+        Utilities.popList(types);
+      }
+  }
+
+%nodeclass Local locates expression
+  {
+    String parameter;
+    Expression expression;
+    Type type;
+  }
+
+%nodeclass Location locates expression
+  {
+    String name;
+    Expression expression;
+  }
+
+%nodeclass Member
+  {
+    String name;
+    ArrayList arguments;
+  }
+
+%nodeclass Sequence extends Expression
+  {
+  }
+
+%nodeclass ExpressionSequence_opt extends Expressions
+  {
+  }
+
+%nodeclass Comprehension extends Expression
+  {
+  }
+
+%nodeclass Monoid
+  {
+    Expression operation;
+    Expression identity;
+  }
+
+%nodeclass Qualifiers_opt
+  {
+    ArrayList patterns;
+    ArrayList expressions;
+
+    void undo ()
+      {
+        Utilities.popList(patterns);
+        Utilities.popList(expressions);
+      }
+  }
+
+%nodeclass Qualifiers extends Qualifiers_opt
+  {
+  }
+
+%nodeclass Qualifier extends Expression
+  {
+    Expression pattern;
+  }
+
+/* ************************************************************************************* */

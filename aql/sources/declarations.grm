@@ -1,0 +1,193 @@
+// FILE. . . . . /home/hak/hlt/src/hlt/language/jaccapps/aql/sources/declarations.grm
+// EDIT BY . . . Hassan Ait-Kaci
+// ON MACHINE. . Hp-Dv7
+// STARTED ON. . Wed Oct 17 23:32:58 2012
+
+/**
+ * This is part of the <a href="../docs/AQLDoc/AQL.html">AQL language
+ * grammar</a> and contains its operator declarations. See <a
+ * href="../docs/AQLDoc.html">AQL's predefined operators</a>.
+ * 
+ * @version     Last modified on Wed Oct 17 23:49:45 2012 by hak
+ * @author      <a href="mailto:hak@acm.org">Hassan A&iuml;t-Kaci</a>
+ * @copyright   &copy; <a href="http://www.hassan-ait-kaci.net/">by the author</a>
+ */
+
+/* *** This contains the declaration part of grammar  **** */
+
+/* ************************************************************************************* */
+/* *******************************  START  OF  DECLARATIONS **************************** */
+/* ************************************************************************************* */
+
+%doc 'operator'
+/**  
+ * The first argument of $operator$ can be any syntactically well-formed
+ * AQL functor (an $Operator$). In particular, it need not be known as
+ * operator prior to runtime. AQL's tokenizer will recognize as a
+ * functor any token that is either an AQL identifier ($ID$), or a
+ * maximal sequence of non alphanumerical characters. AQL also supports
+ * the classical prefix function notation used in math and conventional
+ * programming. Thus, any AQL functor, whether declared operator or not,
+ * can always be parsed as a prefix operator preceding a parenthesized
+ * comma-separated sequence of arguments. Whether it is a declared
+ * operator determines how it may be parsed otherwise. For example:
+ * 
+ * <pre class="code">
+ *         AQL> 1 + 2;
+ *         3 : int
+ *         AQL> +(1,2). 
+ *         3 : int
+ * </pre>
+ * Note that because AQL's functions are first-class citizens, defined
+ * functors are themselves expressions of higher-types and can also be
+ * parsed as $UntypedExpression$s (see $OperatorExpression$).
+ *
+ * <p>
+ *
+ * The second argument of $operator$ is an $INT$ and denotes the binding
+ * looseness (as opposed to precedence) of the given operator. AQL uses
+ * the same dynamic operator specification used by Prolog's
+ * <tt>op/3</tt> meta-operator. Note that looseness works as the
+ * opposite of what is known as operator binding precedence used in
+ * parsing: the smaller an operator's binding looseness, the higher its
+ * precedence. In fact, if the looseness is <i>L</i>, then the
+ * precedence is <i>P</i> = 1200-<i>L</i>+1. Thus, both binding
+ * looseness and precedence range inclusively from 1 (min looseness, max
+ * precedence) to 1200 (max looseness, min precedence).
+ * 
+ * <p>
+ *
+ * The third argument of $operator$ is called the operator's
+ * specifier. It is a symbol that encodes three kinds of information
+ * concerning the operator: 
+ * 
+ * <ol>
+ * <li><i>arity</i> (unary or binary),
+ * <li><i>fixity</i> (prefix, infix, or postfix),
+ * <li><i>associativity</i> (left-, right-, or non-associative).
+ * </ol>
+ * 
+ * <p>
+ * 
+ * <a name="specifier"></a> 
+ * The specifier is an identifier consisting of either two or three of the
+ * letters <tt>'f'</tt>, <tt>'x'</tt>, and <tt>'y'</tt>, which are
+ * interpreted as follows. The letter <tt>'f'</tt> stands for the
+ * operator's position in an expression, and the letters <tt>'x'</tt> and
+ * <tt>'y'</tt> stand for the arguments' positions. The letters
+ * <tt>'f'</tt>, <tt>'y'</tt>, and <tt>'x'</tt>, are simply mnemonics for,
+ * respectively, <i>"<tt>functor</tt>"</i> (<i>i.e.</i>, indicating the
+ * position of the operator symbol with respect to its argument(s)),
+ * <i>"<tt>yes</tt>"</i> (<i>i.e.</i>, the argument associates on this side
+ * of the operator), and <i>"<tt>no</tt>"</i> (<i>i.e.</i>, the does not
+ * associate on this side of the operator).  In other words, a <tt>'y'</tt>
+ * occurring on the left (resp., right) of <tt>'f'</tt>, means that the
+ * operator is left-associative (resp., right-associative). An <tt>'x'</tt>
+ * occurring on the left (resp., right) of <tt>'f'</tt>, means that the
+ * operator is <i>not</i> left-associative (resp.,
+ * right-associative). Thus, the possible operator specifiers are:
+ * 
+ * <p>
+ * 
+ * <table bgcolor=white align=center border=1 cellpadding=3>
+ * <tr><th align=left><i>Specifier</i></th><th align=left><i>Arity</i></th>
+ * <th align=left><i>Fixity</i></th><th align=left><i>Associativity</i></th><tr>
+ * <tr><td><tt>fx</tt></td><td>unary </td><td>prefix </td><td>non-associative</td><tr>
+ * <tr><td><tt>fy</tt></td><td>unary </td><td>prefix </td><td>right-associative</td><tr>
+ * <tr><td><tt>xf</tt></td><td>unary </td><td>postfix</td><td>non-associative</td><tr>
+ * <tr><td><tt>yf</tt></td><td>unary </td><td>postfix</td><td>left-associative</td><tr>
+ * <tr><td><tt>xfx</tt></td><td>binary</td><td>infix  </td><td>non-associative</td><tr>
+ * <tr><td><tt>xfy</tt></td><td>binary</td><td>infix  </td><td>right-associative</td><tr>
+ * <tr><td><tt>yfx</tt></td><td>binary</td><td>infix  </td><td>left-associative</td><tr>
+ * </table>
+ * 
+ * <p>
+ * 
+ * Note that <tt>yfy</tt> is not allowed as an operator specifier
+ * because that would mean an ambiguous way of parsing the operator by
+ * associating either to the left or to the right.
+ *
+ */
+
+/* ************************************************************************************* */
+
+%import hlt.language.design.kernel.*;
+%import hlt.language.design.kernel.Compiler;
+%import hlt.language.design.types.*;
+%import hlt.language.design.instructions.*;
+%import hlt.language.design.backend.*;
+%import hlt.language.design.backend.Runtime;
+
+%import hlt.language.tools.Misc;
+%import hlt.language.tools.Debug;
+%import hlt.language.util.Stack;
+%import hlt.language.util.Error;
+%import hlt.language.util.Span;
+%import hlt.language.util.Locatable;
+
+%import hlt.language.io.CircularInclusionException;
+
+%import java.util.HashMap;
+
+%import java.io.PrintStream;
+%import java.io.FileNotFoundException;
+
+/* ************************************************************************ */
+
+%start Statements_opt
+
+%nodeprefix "AQL_"
+%nodesuffix ""
+
+%dynamic Operator
+%Operator '||' xfy 800
+%Operator '&&' xfy 700
+%Operator '==' xfy 600
+%Operator '!=' xfy 600
+%Operator 'in' xfx 590
+%Operator 'C=' yfx 590
+%Operator 'U=' xfy 580
+%Operator '=U' xfy 580
+%Operator '-=' xfy 580
+%Operator '^=' xfy 575
+%Operator '=^' xfy 575
+%Operator 'I=' xfy 570
+%Operator '=I' xfy 570
+%Operator 'U'  yfx 560
+%Operator '^'  yfx 555
+%Operator 'I'  yfx 550
+%Operator '<'  xfx 500
+%Operator '<=' xfx 500
+%Operator '>'  xfx 500
+%Operator '>=' xfx 500
+%Operator '..' xfx 450
+%Operator 'max' yfx 440
+%Operator 'min' yfx 430
+%Operator '+'  xfy 400
+%Operator '-'  yfx 400
+%Operator '*'  yfx 300
+%Operator '/'  yfx 300
+%Operator '%'  yfx 300
+%Operator '**' yfx 200
+%Operator '!'   fy 100
+%Operator '-'   fy 100
+%Operator '+'   fy 100
+%Operator 'set' fx 100
+%Operator 'bag' fx 100
+%Operator 'list' fx 100
+%Operator 'strip' fy 50
+
+%left  29 '@'
+%left  28 'as'
+%token 27 INT REAL CHAR STRING ID SPECIFIER '<' '>'
+%right 26 '->'
+%left  25 '.'
+%right 24 '$'
+%token 23 '[' ']'
+%token 22 '(' ')'
+
+
+/* ************************************************************************************* */
+/* *****************************    END  OF  DECLARATIONS    *************************** */
+/* ************************************************************************************* */
+
