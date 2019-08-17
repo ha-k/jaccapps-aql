@@ -1,5 +1,7 @@
 # jaccapps-aql
-AQL: Algebraic Query Language - language design example implemented in Java using [Jacc](https://hassan-ait-kaci.net/hlt/doc/hlt/jaccdoc/000_START_HERE.html) compiler generator
+AQL: Algebraic Query Language - language design example implemented in Java using the [Jacc](https://hassan-ait-kaci.net/hlt/doc/hlt/jaccdoc/000_START_HERE.html) compiler generator.
+
+AQL is described in: https://hassan-ait-kaci.net/hlt/doc/hlt/jaccdoc/jaccapps/aql/docs/AQLDoc/000StartHere.html
 
 For the AQL class files, the html docs of the source code, benches and benches reference files, and test files, check out:
 
