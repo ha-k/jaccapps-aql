@@ -15,4 +15,4 @@ https://github.com/ha-k/jaccapps-aql-benches-refs
 
 https://github.com/ha-k/jaccapps-aql-tests
 
-The contents must be copied into the main aql directory under the names: *classes*, *docs*, *benches*, and *tests*, and the contents of jaccapps-aql-benches-refs in a subdirectory of *benches* named *refbench*.
+The contents must be copied into the main aql directory under the names: '**classes**', '**docs**', '**benches**', and '**test**', and the contents of jaccapps-aql-benches-refs in a subdirectory of '**benches**' named '**refbench**'.
