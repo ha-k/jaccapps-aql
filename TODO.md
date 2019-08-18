@@ -1,3 +1,6 @@
+NB: not all of this makes sense nor is high-priority.
+
+
 0. Fix collections and redo benches!!!
 
 1. Finish the hyperdocumentor: fix Jacc so that an additional option to
